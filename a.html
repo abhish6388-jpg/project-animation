@@ -1,0 +1,257 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Realistic Drone with Camera & Sensors – Weed Spray</title>
+<style>
+body { margin:0; }
+#legend {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(255,255,255,0.8);
+  padding: 10px 15px;
+  border-radius: 10px;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.4em;
+}
+#legend h3 {
+  margin: 0 0 5px 0;
+  font-size: 16px;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+<div id="legend">
+  <h3>Legend</h3>
+  🚁 Drone <br>
+  🔄 Rotors <br>
+  📷 Camera Module <br>
+  📡 Sensors <br>
+  💧 Spray Nozzle <br>
+  🌱 Normal Plant <br>
+  🌿 Weed Plant (🔴 after spray) <br>
+  ✨ Spray Mist <br>
+  ⛰️ Hills <br>
+  🌳 Trees <br>
+  🟩 Ground
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+
+// Cameras
+const topCamera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 2000);
+topCamera.position.set(0,100,150); topCamera.lookAt(0,0,0);
+const followCamera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 2000);
+
+// Renderer
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth,window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff,0.7));
+const dirLight = new THREE.DirectionalLight(0xffffff,0.8); dirLight.position.set(100,150,100); scene.add(dirLight);
+
+// Ground
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80,80), new THREE.MeshLambertMaterial({color:0x6aa84f}));
+ground.rotation.x = -Math.PI/2; scene.add(ground);
+
+// Hills
+function addHill(x,z,h,r,color){
+  const hill = new THREE.Mesh(new THREE.ConeGeometry(r,h,32), new THREE.MeshLambertMaterial({color:color}));
+  hill.position.set(x,h/2,z); scene.add(hill);
+}
+for(let i=-60;i<=60;i+=30){
+  addHill(i,-50,12,12,0x556b2f);
+  addHill(i+15,-60,10,10,0x6b8e23);
+}
+
+// Trees
+function addTree(x,z,scale=1){
+  const tree=new THREE.Group();
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.5*scale,0.5*scale,4*scale,12), new THREE.MeshLambertMaterial({color:0x8b4513}));
+  trunk.position.y=2*scale; tree.add(trunk);
+  const foliage=new THREE.Mesh(new THREE.ConeGeometry(2*scale,5*scale,8), new THREE.MeshLambertMaterial({color:0x228b22}));
+  foliage.position.y=5*scale; tree.add(foliage);
+  tree.position.set(x,0,z); scene.add(tree);
+}
+for(let i=-50;i<=50;i+=20){ addTree(i,-45,1.2); addTree(i,-35,1); }
+
+// Drone
+const drone = new THREE.Group();
+drone.position.set(-35,12,-35); // low-flying, stable height
+
+// Drone body
+const body = new THREE.Mesh(new THREE.BoxGeometry(4,1,4), new THREE.MeshPhongMaterial({color:0x1e3a8a, shininess:80}));
+drone.add(body);
+
+// Drone wings / arms
+const armGeo = new THREE.BoxGeometry(0.3,0.1,6);
+const armMat = new THREE.MeshLambertMaterial({color:0x333333});
+function addArm(rx,rz,ry){
+  const arm = new THREE.Mesh(armGeo,armMat);
+  arm.position.set(rx,0,rz);
+  arm.rotation.y=ry;
+  drone.add(arm);
+}
+addArm(0,0,0);
+addArm(0,0,Math.PI/2);
+
+// Rotors
+const rotorGeo = new THREE.CylinderGeometry(0.2,0.2,0.2,12);
+const rotorMat = new THREE.MeshLambertMaterial({color:0x444444});
+const rotors = [];
+[[3,0],[ -3,0],[0,3],[0,-3]].forEach(p=>{
+  const r = new THREE.Mesh(rotorGeo,rotorMat);
+  r.rotation.x=Math.PI/2;
+  r.position.set(p[0],0.5,p[1]);
+  r.userData.rotate=true;
+  drone.add(r);
+  rotors.push(r);
+});
+
+// Camera module
+const cameraModule = new THREE.Mesh(new THREE.BoxGeometry(0.6,0.4,0.6), new THREE.MeshLambertMaterial({color:0x000000}));
+cameraModule.position.set(0,0.8,1.5); drone.add(cameraModule);
+
+// Sensors
+const sensorGeo = new THREE.CylinderGeometry(0.1,0.1,0.5,12);
+const sensorMat = new THREE.MeshLambertMaterial({color:0xffaa00});
+const sensor1 = new THREE.Mesh(sensorGeo,sensorMat); sensor1.rotation.z=Math.PI/2; sensor1.position.set(-1,0.5,1.5); drone.add(sensor1);
+const sensor2 = sensor1.clone(); sensor2.position.set(1,0.5,1.5); drone.add(sensor2);
+
+// Nozzles
+const nozzleMat = new THREE.MeshLambertMaterial({color:0x00aaff});
+const nozzle1 = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.15,0.8,12), nozzleMat);
+nozzle1.rotation.x=Math.PI/2; nozzle1.position.set(1,-0.6,0.8); drone.add(nozzle1);
+const nozzle2 = nozzle1.clone(); nozzle2.position.set(1,-0.6,-0.8); drone.add(nozzle2);
+
+scene.add(drone);
+
+// Plants
+function createPlant(x,z,weed=false){
+  const plant=new THREE.Group();
+  const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.25,3,8), new THREE.MeshLambertMaterial({color:weed?0x2d572c:0x2d752c}));
+  stem.position.y=1.5; plant.add(stem);
+  const leafGeo=new THREE.ConeGeometry(1.2,2.5,8);
+  const leafMat=new THREE.MeshLambertMaterial({color:weed?0x1f7a1f:0x228b22});
+  for(let i=0;i<3;i++){
+    const leaf=new THREE.Mesh(leafGeo,leafMat);
+    leaf.position.y=2; leaf.rotation.z=i*2*Math.PI/3; plant.add(leaf);
+  }
+  plant.position.set(x,0,z);
+  scene.add(plant);
+  plant.userData.isWeed=weed;
+  return plant;
+}
+const plants=[];
+for(let i=-30;i<=30;i+=10){
+  for(let j=-30;j<=30;j+=10){
+    plants.push(createPlant(i,j,false));
+  }
+}
+for(let i=0;i<10;i++){
+  plants.push(createPlant((Math.random()*60)-30,(Math.random()*60)-30,true));
+}
+
+// Spray particles
+const sprayParticles=[];
+function sprayFromNozzle(nozzle){
+  const np=new THREE.Vector3(); nozzle.getWorldPosition(np);
+  for(let i=0;i<15;i++){
+    const p=new THREE.Mesh(
+      new THREE.SphereGeometry(0.18,8,8),
+      new THREE.MeshBasicMaterial({color:0x00bfff,transparent:true,opacity:1})
+    );
+    p.position.copy(np);
+    p.userData={vx:(Math.random()-0.5)*0.2,vy:-0.3,vz:(Math.random()-0.5)*0.2,fade:0.015};
+    scene.add(p);
+    sprayParticles.push(p);
+  }
+}
+
+// Drone path (zig-zag low-flying)
+const path=[]; let dir=1;
+for(let z=-30;z<=30;z+=8){
+  if(dir===1){
+    path.push(new THREE.Vector3(-30,12,z));
+    path.push(new THREE.Vector3(30,12,z));
+  } else {
+    path.push(new THREE.Vector3(30,12,z));
+    path.push(new THREE.Vector3(-30,12,z));
+  }
+  dir*=-1;
+}
+let currentPoint=0, pauseTimer=0, useFollow=true;
+
+function animate(){
+  requestAnimationFrame(animate);
+
+  // Rotors spin
+  rotors.forEach(r=>r.rotation.y+=0.5);
+
+  // Maintain stable height
+  drone.position.y = 12;
+
+  if(pauseTimer>0){
+    sprayFromNozzle(nozzle1);
+    sprayFromNozzle(nozzle2);
+    pauseTimer--;
+  } else if(currentPoint<path.length-1){
+    const target=path[currentPoint+1];
+    drone.position.lerp(target,0.015);
+    drone.lookAt(target.x,12,target.z);
+    if(drone.position.distanceTo(target)<0.5) currentPoint++;
+  }
+
+  // Weed detection
+  plants.forEach(p=>{
+    if(p.userData.isWeed && !p.userData.sprayed){
+      const dx=Math.abs(drone.position.x-p.position.x);
+      const dz=Math.abs(drone.position.z-p.position.z);
+      if(dx<5 && dz<5 && pauseTimer===0){
+        p.traverse(o=>{ if(o.material) o.material.color.set(0xff0000); });
+        p.userData.sprayed=true;
+        pauseTimer=80;
+      }
+    }
+  });
+
+  // Spray animation
+  sprayParticles.forEach((p,i)=>{
+    p.position.x+=p.userData.vx;
+    p.position.y+=p.userData.vy;
+    p.position.z+=p.userData.vz;
+    p.material.opacity-=p.userData.fade;
+    if(p.material.opacity<=0 || p.position.y<=0){
+      scene.remove(p);
+      sprayParticles.splice(i,1);
+    }
+  });
+
+  if(useFollow){
+    followCamera.position.set(drone.position.x-20,drone.position.y+15,drone.position.z+20);
+    followCamera.lookAt(drone.position.x,0,drone.position.z);
+    renderer.render(scene,followCamera);
+  } else{
+    renderer.render(scene,topCamera);
+  }
+}
+animate();
+
+// Camera toggle
+window.addEventListener('keydown',(e)=>{ if(e.key==='c'||e.key==='C') useFollow=!useFollow; });
+window.addEventListener('resize',()=>{
+  topCamera.aspect=window.innerWidth/window.innerHeight; topCamera.updateProjectionMatrix();
+  followCamera.aspect=window.innerWidth/window.innerHeight; followCamera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+</script>
+</body>
+</html>
